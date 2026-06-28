@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #messages {
+            list-style: none;
+            padding: 0;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        #messages li {
+            margin-bottom: 8px;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .system {
+            background: #fff3e0;
+            font-style: italic;
+            text-align: center;
+            color: #e65100;
+        }
+        .message {
+            background: #e3f2fd;
+        }
+        .private {
+            background: #fce4ec;
+            color: #880e4f;
+        }
+        .error {
+            background: #ffebee;
+            color: red;
+        }
+        .input-area {
+            display: flex;
+            margin-top: 10px;
+            gap: 10px;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .login-area {
+            margin-bottom: 20px;
+        }
+        .login-area input {
+            padding: 10px;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Чат на WebSockets</h1>
+
+    <div class="login-area" id="loginArea">
+        <input type="text" id="usernameInput" placeholder="Введите имя" autocomplete="off"/>
+        <button onclick="connect()">Подключиться</button>
+    </div>
+
+    <div id="chatArea" style="display: none;">
+        <ul id="messages"></ul>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Сообщение или /w имя текст" autocomplete="off"/>
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let username = '';
+
+        function connect() {
+            username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                alert('Введите имя пользователя');
+                return;
+            }
+
+            ws = new WebSocket(`ws://localhost:8000/ws?username=${encodeURIComponent(username)}`);
+
+            ws.onmessage = function(event) {
+                const messages = document.getElementById('messages');
+                const li = document.createElement('li');
+
+                try {
+                    const data = JSON.parse(event.data);
+                    const time = data.ts ? new Date(data.ts).toLocaleTimeString() : '';
+
+                    if (data.type === 'system') {
+                        li.className = 'system';
+                        li.textContent = data.text + ' (Online: ' + data.online + ')';
+                    } else if (data.type === 'private') {
+                        li.className = 'private';
+                        li.textContent = '[Приватно] ' + data.from + ' -> ' + data.to + ': ' + data.text;
+                        if (time) li.textContent += ' [' + time + ']';
+                    } else if (data.type === 'error') {
+                        li.className = 'error';
+                        li.textContent = 'Ошибка: ' + data.detail;
+                    } else {
+                        li.className = 'message';
+                        li.textContent = data.user + ': ' + data.text;
+                        if (time) li.textContent += ' [' + time + ']';
+                    }
+                } catch (e) {
+                    li.className = 'message';
+                    li.textContent = event.data;
+                }
+
+                messages.appendChild(li);
+                messages.scrollTop = messages.scrollHeight;
+            };
+
+            ws.onopen = function() {
+                document.getElementById('loginArea').style.display = 'none';
+                document.getElementById('chatArea').style.display = 'block';
+            };
+
+            ws.onclose = function() {
+                document.getElementById('loginArea').style.display = 'block';
+                document.getElementById('chatArea').style.display = 'none';
+                ws = null;
+            };
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Нет подключения');
+                return;
+            }
+
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            ws.send(JSON.stringify({ text: text }));
+            input.value = '';
+        }
+
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        document.getElementById('usernameInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') connect();
+        });
+    </script>
+</body>
+</html>
